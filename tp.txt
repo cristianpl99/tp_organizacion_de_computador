@@ -1,0 +1,908 @@
+.data
+
+archivo_ranking: .asciz "ranking.txt"
+buffer2: .space 1000
+nombre: .asciz "            "
+lennombre=.-nombre
+ranking: .asciz "-JUGADOR:                   PUNTAJE:  "
+lenranking=.-ranking
+puntaje: .asciz " "
+lenpuntaje=.-puntaje
+perdiste: .asciz " PERDISTE.JUGAR DE NUEVO? "
+lenperdiste=.-perdiste
+ganaste: .asciz " GANASTE.JUGAR DE NUEVO? puntaje: "
+lenganaste=.-ganaste
+punteria: .asciz " PROBA TU PUNTERIA "
+lenpunteria=.-punteria
+punteria_x: .asciz " PROBA TU PUNTERIA X "
+lenpunteria_x=.-punteria_x
+punteria_y: .asciz " PROBA TU PUNTERIA Y "
+lenpunteria_y=.-punteria_y
+acertaste: .asciz " ACERTASTE!JUGAR DE NUEVO  "
+lenacertaste=.-acertaste
+jugar_de_nuevo: .asciz " QUERES JUGAR DE NUEVO : "
+lenjugar_de_nuevo=.-jugar_de_nuevo
+caracter_invalido: .asciz " CARACTER INVALIDO "
+lencaracter_invalido=.-caracter_invalido
+letra_ingresada: .asciz " "
+x_ingresada: .asciz "  "
+y_ingresada: .asciz "  "
+letra_jugar_de_nuevo: .asciz " "
+// Declaración de las pantallas del juego
+cls: .asciz "\x1b[H\x1b[2J"
+lencls=.-cls
+pantalla_inicio: .asciz "***************************************************\n*$
+lenpantalla_inicio=.-pantalla_inicio
+pantalla_principal: .asciz "                                                   $
+lenpantalla_principal=.-pantalla_principal
+pantalla_original: .asciz "╔═══════════════════════════════════════════════════$
+lenpantalla_original=.-pantalla_original
+// Datos necesarios para el funcionamiento del sorteo de palabra
+archivo: .asciz "palabras.txt"
+buffer1: .space 334
+palabraRandom: .asciz "          "
+seed: .word 1
+const1: .word 1103515245
+const2: .word 12345
+numeroRandomOk: .byte
+numeroRandomGrande: .word 0
+numeroPseudoRandom: .byte 0
+arrayBooleano: .asciz "ffffffffffffffffffffffffffffff" //simulamos un arrar de $
+
+/*
+
+* posiciones de elementos *O
+
+donde debe empezar a ubicarse el nombre el jugador : #502
+donde debe ubicarse el puntaje:                      #552
+donde debe ubicarse la primer @ de la palabra:       #1085
+donde debe mostrarse la letra ingresada              #1313
+soga 1 2 3 :                                         #978 , #1058, #1034
+cabeza:                                              #1214
+brazo derecho:                                       #1289
+pecho:                                               #1290
+brazo izquierdo:                                     #1291
+Abdomen:                                             #1366
+pierna izquiera:                                     #1447
+pierna derecha:                                      #1449
+
+*/
+
+.text
+                                        /*F U N C I O N E S   O B L I G A T O R$
+
+leer_palabras: //esta funcion abre el archivo palabras.txt en una etiqueta buff$
+        .fnstart
+                push {lr}
+                bl aux_abro_archivo
+                bl aux_lectura_archivo
+                bl aux_cerrar_archivo
+                pop {lr}
+                bx lr
+        .fnend
+
+sortear_palabra: //esta funcion sortea una palabra random en cada juego de una $
+        .fnstart
+        //R0 va a rener el numero random
+        push {lr}
+        ldr r8,=numeroRandomOk
+        ldr r0,[r8]
+        ldr r1,=buffer1 //
+        ldrb r10,[r1] //en r10 esta la primer letra del archivo
+        mov r5,#0  //contador para el offset
+        mov r4,#0  //contador que divide las palabras
+        ldr r3,=palabraRandom // Direccion de memoria para guardar con str la p$
+        mov r9,#',' //r9 guarda la , que divide palabras
+        mov r11,#0 //contador offset de palabra random
+
+        loop5:
+        cmp r10,#0 // finalizo la cadena salto a fin
+        beq finDelArchivo
+        cmp r10,r9 // r9 tiene una coma para comparar
+        beq contadorAumenta //si es una coma salto a incrementar el contador (a$
+        add r5,#1 // offset aumenta
+        ldrb r10,[r1,r5] //carga en r10 letra siguiente
+        b loop5
+
+        contadorAumenta:
+        add r4,#1 //incremento contador de comas para dividir palabra
+        cmp r0,r4 // comparo si el numero random es igual al contador de comas $
+       beq concateno      //si es igual es la palabra elegida de forma random,$
+        add r5,#1 //incremento offset si no es una coma
+        ldrb r10,[r1,r5] // voy a la siguiente letra
+        b loop5
+
+        concateno:
+        add r5,#1 //incremento el offset asi no agarro la coma
+        ldrb r10,[r1,r5] //levanto caracter despues de la coma
+        cmp r10,r9 //si es igual a una coma no concateno voy a fin
+        beq finDelArchivo
+ strb r10,[r3,r11] //guardo letra en la =palabraRandom <----------------$
+        add r11,#1
+        b concateno
+
+        finDelArchivo:
+        //swi 0
+        pop {lr}
+        bx lr
+  .fnend
+
+leer_letra: //funcion que lee la letra ingresada por el jugador. extra: si no e$
+        .fnstart
+                push {lr}
+                leer_letra_loop:
+                mov r7,#3
+                mov r0,#0
+                mov r2,#2
+                ldr r1,=letra_ingresada
+                swi 0
+ ldrb r2,[r1]
+                cmp r2,#'A'
+                bge check_minuscula
+                ldr r4,=caracter_invalido
+                bl aux_mensaje_pantalla
+                b leer_letra_loop
+                check_minuscula:
+                cmp r2,#'Z'
+                ble convertir_a_minuscula
+                cmp r2,#'a'
+                bge check_mayuscula
+                ldr r4,=caracter_invalido
+                bl aux_mensaje_pantalla
+                b leer_letra_loop
+                check_mayuscula:
+                cmp r2,#'z'
+                ble letra_valida
+                b leer_letra_loop
+                convertir_a_minuscula:
+  add r2, #0x20
+                strb r2,[r1]
+                letra_valida:
+                pop {lr}
+                bx lr
+        .fnend
+
+comprobar_letra://esta funcion chequea si la letra ingresada se encuentra en la$
+         .fnstart
+                push {lr}
+                ldr r7,=pantalla_principal
+                ldr r1,=letra_ingresada
+                ldrb r2,[r1]
+                mov r3,#0
+                ldr r4,=palabraRandom
+                mov r12,#0 //flag para saber si hubo acierto. comienza en false
+                loop_palabra:
+                ldrb r5,[r4,r3]
+                cmp r5,#0
+ beq fin_loop_palabra
+                cmp r2,r5
+                beq loop_letras
+                add r3,#1
+                b loop_palabra
+                loop_letras:
+                mov r8,#1085
+                add r9,r3,r8
+                add r6,r7,r9
+                strb r2,[r6]
+                mov r12,#1 //flip del flag a true
+                add r3,#1
+                b loop_palabra
+                fin_loop_palabra:
+                cmp r12,#0 //si el flag no paso a true, no acertó
+                bne fin_comprobar_letras
+                bl resultado_intento
+                fin_comprobar_letras:
+                pop {lr}
+ bx lr
+        .fnend
+
+resultado_intento:  //basado en el puntaje actual, lo actualiza y dibuja la par$
+        .fnstart
+                push {lr}
+                        ldr r7,=pantalla_principal
+                        ldrb r10,[r7,#552]
+                        cmp r10,#'7'
+                        beq cabeza
+                        cmp r10,#'6'
+                        beq torso
+                        cmp r10,#'5'
+                        beq abdomen
+                        cmp r10,#'4'
+                        beq brazo_izq
+                        cmp r10,#'3'
+                        beq brazo_der
+                        cmp r10,#'2'
+ beq pierna_izq
+                        cmp r10,#'1'
+                        beq pierna_der
+                        cabeza:
+                        mov r11,#'6'
+                        strb r11,[r7,#552]
+                        mov r11,#'O'
+                        strb r11,[r7,#1214]
+                        b fin_no_acerto
+                        torso:
+                        mov r11,#'5'
+                        strb r11,[r7,#552]
+                        mov r11,#'+'
+                        strb r11,[r7,#1290]
+                        b fin_no_acerto
+                        abdomen:
+                        mov r11,#'4'
+                        strb r11,[r7,#552]
+                        mov r11,#'I'
+ strb r11,[r7,#1366]
+                        b fin_no_acerto
+                        brazo_izq:
+                        mov r11,#'3'
+                        strb r11,[r7,#552]
+                        mov r11,#'-'
+                        strb r11,[r7,#1289]
+                        b fin_no_acerto
+                        brazo_der:
+                        mov r11,#'2'
+                        strb r11,[r7,#552]
+                        mov r11,#'-'
+                        strb r11,[r7,#1291]
+                        b fin_no_acerto
+                        pierna_izq:
+                        mov r11,#'1'
+                        strb r11,[r7,#552]
+                        mov r11,#'/'
+                        strb r11,[r7,#1447]
+ b fin_no_acerto
+                        pierna_der:
+                        mov r11,#'0'
+                        strb r11,[r7,#552]
+                        mov r11,#'L'
+                        strb r11,[r7,#1449]
+                        bl aux_disparo
+                        fin_no_acerto:
+                pop {lr}
+        .fnend
+
+informar_resultado://esta función chequea si quedan letras por adivinar
+        .fnstart
+                push {lr}
+                ldr r7, =pantalla_principal
+                mov r0, #1085                   // posicion de la primera @
+                mov r1, #15                     // chequea hasta 15 posiciones $
+                mov r2, #'@'
+        check_loop:
+                ldrb r10, [r7, r0]
+                cmp r10, r2
+                beq fin_resultado            //si encuentra una arroba es que e$
+                add r0, #1
+                subs r1, #1
+                bne check_loop
+                ldr r0, =pantalla_principal  //si no encontró arrobas, jugador $
+                mov r6,#1460
+                add r0, r0, r6
+                ldr r1,=ganaste
+                mov r2,#0
+        copia_loop:                             //copia el mensaje de ganaste a$
+                ldrb r3, [r1,r2]
+                cmp r3, #0
+ beq fin_copia
+                strb r3, [r0,r2]
+                add r2,#1
+                b copia_loop
+        fin_copia:
+                ldr r0, =pantalla_principal     // funcion levanta de la pantal$
+                ldrb r8,[r0,#552]
+                mov r9, #1460                   // ubicación del puntaje
+                add r2,r9
+                strb r8,[r0,r2]                 //agrega el puntaje a l mapa pr$
+                bl grabar_ranking
+                mov r12,#'f'                    //flip del flag de juego termin$
+        fin_resultado:
+                pop {lr}
+                bx lr
+        .fnend
+
+leer_ranking: //esta función levantan el archivo ranking y la asigna a una etiq$
+         .fnstart
+  push {lr}
+                mov r7,#5
+                ldr r0,=archivo_ranking
+                mov r1,#0
+                mov r2,#0
+                swi 0
+                cmp r0,#0
+                blt error
+                mov r6,r0
+                //hasta acá abre
+                mov r7,#3
+                ldr r1,=buffer2
+                mov r2,#1000
+                swi 0
+                bl mostrar_ranking
+                mov r0,r6
+                mov r7,#6
+                swi 0
+ //hasta acá cierra
+                pop {lr}
+                bx lr
+        .fnend
+
+mostrar_ranking: // esta función se queda con los tres ultimos jugadores y sus $
+        .fnstart
+                push {lr}
+                ldr r0,=buffer2
+                ldr r1,=pantalla_inicio
+                mov r2,#1000
+                mov r4,#0
+                mov r5,#733
+                final_ranking:
+                cmp r4,#3
+                beq copiar_ranking_loop
+                cmp r2,#0
+                beq fin_ranking
+                sub r2,#1
+ ldrb r3,[r0,r2]
+                cmp r3,#'-'
+                beq suma_guion
+                b final_ranking
+                suma_guion:
+                add r4,#1
+                b final_ranking
+                copiar_ranking_loop:
+                ldrb r3,[r0,r2]
+                cmp r3,#0
+                beq fin_ranking
+                cmp r3,#'-'
+                beq saltar_linea
+                continuar_copia:
+                strb r3,[r1,r5]
+                add r2,#1
+                add r5,#1
+                b copiar_ranking_loop
+                //hasta aca copia a inicio
+ saltar_linea:
+                add r5,#66
+                b continuar_copia
+                fin_ranking:
+                pop {lr}
+                bx lr
+        .fnend
+
+
+grabar_ranking: // ésta función levanta el valor de la etiqueta nombre, el punt$
+         .fnstart
+                push {lr}
+                bl aux_agregar_puntaje
+                mov r7,#5
+                ldr r0,=archivo_ranking
+                mov r1,#2
+                mov r2,#438
+                swi 0
+                cmp r0,#0
+ blt error
+                mov r6,r0
+                //hasta acá abre
+                 mov r7,#3
+                ldr r1,=buffer2
+                mov r2,#1000
+                swi 0
+                //hasta acá lee
+                mov r0,r6
+                mov r7,#4
+                ldr r1,=ranking
+                mov r2,#38
+                swi 0
+                //hasta aca escribe nombre
+                mov r0,r6
+                mov r7,#6
+                swi 0
+                //aca cierra
+                pop {lr}
+ bx lr
+        .fnend
+
+imprimir_mapa:
+        .fnstart
+                push {lr}
+                mov r7,#4
+                mov r0,#1
+                ldr r2,=lenpantalla_principal
+                ldr r1,=pantalla_principal
+                swi 0
+                pop {lr}
+                bx lr
+        .fnend
+
+                                                /*F U N C I O N E S  A U X I L $
+
+aux_my_rand:
+        .fnstart
+ push {lr}
+                ldr r1, =seed @ leo puntero a semilla
+                ldr r0, [ r1 ] @ leo valor de semilla
+                ldr r2, =const1
+                ldr r2, [ r2 ] @ leo const1 en r2
+                mul r3, r0, r2 @ r3= seed * 1103515245
+                ldr r0, =const2
+                ldr r0, [ r0 ] @ leo const2 en r0
+                add r0, r0, r3 @ r0= r3+ 12345
+                str r0, [ r1 ] @ guardo en variable seed
+/* Estas dos lí neas devuelven "seed > >16 & 0x7fff ".
+Con un peque ño truco evitamos el uso del AND */
+                lsr r0, # 1
+                lsr r0, # 17
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_my_srand:
+  .fnstart
+                push {lr}
+                ldr r1, =seed
+                str r0, [ r1 ]
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_numero_aleatorio: //achica el numero gigante a un numero entre 1 y 20
+        .fnstart
+                push {lr}
+        loop_numero_aleatorio:
+                mov r1,#31 //numero con el que "divido"
+                ldr r2,=numeroRandomGrande
+                ldr r0,[r2] //numeroRandomOkO
+                //add r0,#1
+        cicloResta:
+                cmp r0,r1
+                blt finResta //si ya no se puede seguir diviendo salgo
+  finResta:
+                cmp r0,#0
+                ble suma
+                bal finRestaOk
+        suma:
+                add r0,#1
+                bal finRestaOk
+        finRestaOk:
+                ldr r6,=arrayBooleano
+                mov r8,r0
+                sub r8,#1
+                ldrb r7,[r6,r8]
+                cmp r7,#'v'
+                beq loop_numero_aleatorio
+                mov r9,#'f'
+                strb r9,[r6,r8]
+                ldr r5,=numeroRandomOk
+  str r0,[r5] //guardo el resultado en numeroRandomOk, da entre 1$
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_cerrar_archivo:
+        .fnstart
+                push {lr}
+                mov r0,r6
+                mov r7,#6
+                swi 0
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_abro_archivo:
+        .fnstart
+                push {lr}
+                mov r7,#5
+  ldr r0,=archivo
+                mov r1,#0
+                swi 0
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_lectura_archivo:
+        .fnstart
+                push {lr}
+                mov r7,#3
+                ldr r1,=buffer1
+                mov r2,#334
+                swi 0
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_copiar_cadena:      // función auxiliar para copiar la cadena original cada$
+ .fnstart
+                push {lr}
+                ldr r0, =pantalla_original
+                ldr r1, =pantalla_principal
+                mov r6, #0
+                loop_copia_cadena:
+                        ldrb r2,[r0,r6]
+                        strb r2,[r1,r6]
+                        add r6,#1
+                        cmp r2,#0
+                        bne loop_copia_cadena
+                bl aux_nombre
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_imprimir_inicio: //imprime la pantalla  inicial del juego
+        .fnstart
+                push {lr}
+ mov r7,#4
+                mov r0,#1
+                ldr r2,=lenpantalla_inicio
+                ldr r1,=pantalla_inicio
+                swi 0
+                mov r7,#3
+                mov r0,#0
+                ldr r2,=lennombre
+                ldr r1,=nombre
+                swi 0
+                buscar_espacio:
+                ldrb r2, [r1]
+                cmp r2, #0
+                beq fin_reemplazo
+                cmp r2, #' '
+                beq reemplazar
+                add r1, r1, #1
+                b buscar_espacio
+                reemplazar:
+ mov r2, #0
+                strb r2, [r1]
+                fin_reemplazo:
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_nombre:     //funcion auxiliar que ubica el nombre del jugador en el mapa
+         .fnstart
+                push {lr}
+                ldr r8,=pantalla_principal
+                mov r9,#502    // posicion del nombre en el mapa
+                add r8,r9
+                ldr r4,=nombre
+                mov r10,#0
+                loop_nombre:
+                ldrb r5,[r4,r10]
+                cmp r5,#0
+                beq fin_nombre
+ strb r5,[r8,r10]
+                add r10,#1
+                bal loop_nombre
+                fin_nombre:
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_arrobas:  //funcion auxiliar que ubica una arroba por cada letra de la pala$
+         .fnstart
+                push {lr}
+                ldr r8,=pantalla_principal
+                mov r9,#1085    //cargo posicion de primer arroba en la plantil$
+                add r8,r9
+                ldr r4,=palabraRandom
+                mov r6,#'@'
+                mov r10,#0
+                loop_arroba:
+                push {lr}
+ ldrb r5,[r4,r10]
+                cmp r5,#0
+                beq fin_arroba
+                strb r6,[r8,r10]
+                add r10,#1
+                bal loop_arroba
+                fin_arroba:
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_letra_ingresada: // funcion auxiliar para mostrar la letra que ingrsó el ju$
+        .fnstart
+                push {lr}
+                ldr r0,=pantalla_principal
+                mov r1,#1313
+                add r0,r0,r1
+                ldr r4,=letra_ingresada
+                ldrb r3,[r4]
+  strb r3,[r0]
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_limpiar_pantalla: // funcion auxiliar que limpia la pantalla
+        .fnstart
+                push {lr}
+                mov r0,#1
+                ldr r1,=cls
+                ldr r2,=lencls
+                mov r7,#4
+                swi 0
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_disparo: // funcion auxiliar de la chance del disparo
+        .fnstart
+  push {lr}
+                bl imprimir_mapa
+                ldr r4,=punteria_x
+                bl aux_mensaje_pantalla
+                bl aux_limpiar_pantalla
+                bl imprimir_mapa
+
+                bl aux_leer_x
+
+                ldr r5,=x_ingresada
+                ldrb r6,[r5]
+                ldrb r7,[r5,#1]
+                cmp r6,#'2'
+                bne erraste_disparo
+                cmp r7,#'0'
+                bne erraste_disparo
+
+                ldr r4,=punteria_y
+                bl aux_mensaje_pantalla
+ bl aux_limpiar_pantalla
+                bl imprimir_mapa
+
+                bl aux_leer_y
+
+                ldr r5,=y_ingresada
+                ldrb r6,[r5]
+                ldrb r7,[r5,#1]
+                cmp r7,#'9'
+                bne erraste_disparo
+                cmp r6,#'0'
+                beq acertaste_disparo
+                cmp r6,#'1'
+                beq acertaste_disparo
+                cmp r6,#'2'
+                beq acertaste_disparo
+                bal erraste_disparo
+                acertaste_disparo:
+                bl aux_acertaste_disparo
+  bal fin_disparo
+                erraste_disparo:
+                bl aux_perdiste
+                fin_disparo:
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_leer_x: // funcion auxiliar para leer la coordenada x del disparo
+        .fnstart
+                push {lr}
+                mov r7,#3
+                mov r0,#0
+                mov r2,#3
+                ldr r1,=x_ingresada
+                swi 0
+                pop {lr}
+                bx lr
+        .fnend
+aux_leer_y:  // funcion auxiliar para leer la coordenada x del disparo
+        .fnstart
+                push {lr}
+                mov r7,#3
+                mov r0,#0
+                mov r2,#3
+                ldr r1,=y_ingresada
+                swi 0
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_acertaste_disparo: // funcion auxiliar para resolver el acierto del disparo
+        .fnstart
+                push {lr}
+                ldr r5,=pantalla_principal
+                mov r6,#1058
+                mov r7,#'X'
+ strb r7,[r5,r6]
+                ldr r4,=acertaste
+                bl aux_mensaje_pantalla
+                bl grabar_ranking
+                mov r12,#'f'
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_mensaje_pantalla: // funcion auxiliar para mostrar mensajes en pantalla. pa$
+        .fnstart
+                push {lr}
+                mov r10,#0
+                ldr r8,=pantalla_principal
+                mov r9,#1460
+                add r8,r9
+                loop_mensaje:
+                ldrb r5,[r4,r10]
+                cmp r5,#0
+ beq fin_mensaje
+                strb r5,[r8,r10]
+                add r10,#1
+                bal loop_mensaje
+                fin_mensaje:
+                bl aux_limpiar_pantalla
+                bl imprimir_mapa
+                pop {lr}
+                bx lr
+        .fnend
+
+aux_perdiste:     // funcion auxiliar que resuelve cuando el jugador no acierta$
+         .fnstart
+         push {lr}
+                ldr r4,=perdiste
+                bl aux_mensaje_pantalla
+                mov r12,#'f' //flip del flag para fin de juego
+                pop {lr}
+                bx lr
+  .fnend
+
+aux_limpiar_registros: // funcion auxiliar para limpiar los registros en cada l$
+        .fnstart
+                push {lr}
+                mov r0,#0
+                mov r1,#0
+                mov r2,#0
+                mov r3,#0
+                mov r4,#0
+                mov r5,#0
+                mov r6,#0
+                mov r7,#0
+                mov r8,#0
+                mov r9,#0
+                mov r10,#0
+                mov r11,#0
+                mov r12,#0
+                pop {lr}
+  bx lr
+        .fnend
+
+aux_random:
+        .fnstart
+        push {lr}
+        ldr r5,=numeroPseudoRandom
+        ldrb r2,[r5]
+        mov r0, r2   // se puede cambiar el valor
+        //mov r0, r5
+        bl aux_my_srand   //se usa una sola vez al principio del programa
+        bl aux_my_rand // leo número aleatorio, queda en r0
+        mov r4,r0
+        ldr r3,=numeroRandomGrande
+        str r4,[r3]
+        ldr r5,=numeroPseudoRandom
+        ldrb r2,[r5]
+        add r2,#13
+        strb r2,[r5]
+  pop {lr}
+        bx lr
+       .fnend
+
+aux_pseudo_random: //toma el numero ascii del nombre ingresado para usar de seed
+        .fnstart
+        push {lr}
+                ldr r4,=nombre
+                ldrb r5,[r4]
+                ldr r4,=numeroPseudoRandom
+                strb r5,[r4]
+        pop {lr}
+        bx lr
+       .fnend
+
+aux_agregar_puntaje: // agrega el puntaje final a una etiqueta ranking al nombr$
+         .fnstart
+          push {lr}
+                ldr r1,=pantalla_principal
+ ldr r2,=nombre
+                ldr r5,=ranking
+                ldrb r3,[r1,#552]
+                mov r4,#0
+                mov r7,#10
+                loop_agregar_puntaje:
+                ldrb r6,[r2,r4]
+                cmp r6,#0
+                beq fin_loop_agregar_puntaje
+                strb r6,[r5,r7]
+                add r4,#1
+                add r7,#1
+                bl loop_agregar_puntaje
+                fin_loop_agregar_puntaje:
+                strb r3,[r5,#37]
+          pop {lr}
+          bx lr
+        .fnend
+.global main
+
+main:
+        bl aux_limpiar_registros
+        bl aux_limpiar_pantalla
+        bl leer_ranking
+        bl aux_imprimir_inicio
+        bl aux_pseudo_random
+        jugar:
+        bl aux_random
+        bl aux_numero_aleatorio
+        bl leer_palabras
+        bl sortear_palabra
+        bl aux_limpiar_registros
+        bl aux_copiar_cadena
+        bl aux_arrobas
+        loop_main:
+        bl aux_limpiar_pantalla
+        bl imprimir_mapa
+ bl leer_letra
+        bl comprobar_letra
+        bl aux_letra_ingresada
+        bl informar_resultado
+        cmp r12,#'f'
+        beq fin
+        bl loop_main
+        bal fin
+        fin:
+        bl aux_limpiar_pantalla
+        bl imprimir_mapa
+        leer_letra_jugar: // código para jugar de nuevo. no es funcion porque r$
+        mov r7, #3
+        mov r0, #0
+        mov r2, #2
+        ldr r1, =letra_jugar_de_nuevo
+        swi 0
+        ldrb r3, [r1]
+        cmp r3, #'s'
+  beq jugar
+        cmp r3, #'n'
+        beq salir_sistema
+        b leer_letra_jugar
+salir_sistema:
+        mov r7, #1
+        mov r0, #0
+        swi 0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
